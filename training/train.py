@@ -32,7 +32,7 @@ def setup_models(config: Dict, device: str) -> tuple:
     generator = SNAC(**config["model"]).to(device)
     mpd = MultiPeriodDiscriminator().to(device)
     msd = MultiScaleSTFTDiscriminator().to(device)
-    
+    print(generator.sampling_rate)
     print(f"Generator parameters: {sum(p.numel() for p in generator.parameters()) / 1e6:.1f}M")
     print(f"MPD parameters: {sum(p.numel() for p in mpd.parameters()) / 1e6:.1f}M")
     print(f"MSD parameters: {sum(p.numel() for p in msd.parameters()) / 1e6:.1f}M")

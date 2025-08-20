@@ -10,10 +10,10 @@ def create_snac_24khz_config():
     """Create SNAC configuration for 24kHz speech model based on paper."""
     return {
         "sampling_rate": 24000,
-        "encoder_dim": 64,
+        "encoder_dim": 48,
         "encoder_rates": [2, 4, 8, 8],  # Speech-specific rates
         "latent_dim": None,
-        "decoder_dim": 1536,
+        "decoder_dim": 1024,
         "decoder_rates": [8, 8, 4, 2],  # Mirror of encoder
         "attn_window_size": None,  # No attention for speech model
         "codebook_size": 4096,
