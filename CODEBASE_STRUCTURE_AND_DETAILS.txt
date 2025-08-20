@@ -1,0 +1,187 @@
+SNAC (Multi-Scale Neural Audio Codec) - Codebase Structure and Details
+===========================================================================
+
+OVERVIEW
+--------
+SNAC is a Multi-Scale Neural Audio Codec that compresses audio into discrete codes at a low bitrate.
+It introduces hierarchical token encoding where coarse tokens are sampled less frequently, covering
+broader time spans compared to traditional codecs like SoundStream, EnCodec, and DAC.
+
+Key Innovation: Coarse tokens at ~10 Hz with context window of 2048 can model consistent structure
+for ~3 minutes of audio, making it particularly useful for language modeling approaches.
+
+PROJECT METADATA
+-----------------
+- Version: 1.2.1
+- Authors: Hubert Siuzdak, Florian Grötschla, Luca A. Lanzendörfer
+- License: MIT License (derived from Descript Audio Codec)
+- Repository: https://github.com/hubertsiuzdak/snac
+- Paper: https://arxiv.org/abs/2410.14411
+- Audio Samples: https://hubertsiuzdak.github.io/snac/
+- Published: NeurIPS 2024 Workshop AI-Driven Speech, Music, and Sound Generation
+
+DIRECTORY STRUCTURE
+-------------------
+/workspace/snac/
+├── snac/                     # Main Python package
+│   ├── __init__.py          # Package initialization, exports SNAC class
+│   ├── snac.py              # Main SNAC model implementation
+│   ├── layers.py            # Encoder/Decoder layers and building blocks
+│   ├── vq.py                # Vector Quantization modules
+│   └── attention.py         # Local Multi-Head Attention implementation
+├── .github/
+│   └── workflows/
+│       └── pypi-release.yml # GitHub Action for PyPI releases
+├── img/
+│   └── snac.png            # Architecture diagram
+├── README.md               # Project documentation with usage examples
+├── setup.py                # Package setup and installation configuration
+├── requirements.txt        # Python dependencies
+├── CITATION.cff            # Citation metadata
+├── LICENSE                 # MIT License
+└── .gitignore             # Git ignore rules
+
+CORE ARCHITECTURE COMPONENTS
+-----------------------------
+
+1. SNAC Class (snac/snac.py)
+   - Main neural codec model inheriting from nn.Module
+   - Configurable sampling rates: 24kHz, 32kHz, 44kHz
+   - Hierarchical encoding with variable temporal resolutions
+   - Supports mono audio only
+
+   Key Parameters:
+   - encoder_rates: [3, 3, 7, 7] - downsampling rates
+   - decoder_rates: [7, 7, 3, 3] - upsampling rates  
+   - vq_strides: [8, 4, 2, 1] - vector quantization strides
+   - codebook_size: 4096 - vocabulary size per codebook
+   - codebook_dim: 8 - dimension of code vectors
+
+   Methods:
+   - encode(): Audio → List[Tensor] (hierarchical codes)
+   - decode(): List[Tensor] → Audio
+   - forward(): Audio → (Reconstructed Audio, Codes)
+   - from_pretrained(): Load pre-trained models from HuggingFace
+
+2. Encoder (snac/layers.py)
+   - Convolutional encoder with residual blocks
+   - Multi-scale downsampling using configurable strides
+   - Optional local multi-head attention
+   - Snake activation function for better audio modeling
+   - Depthwise convolutions for efficiency
+
+   Architecture Flow:
+   Input → WNConv1d → EncoderBlocks → LocalMHA → Output
+   
+   EncoderBlock components:
+   - 3 ResidualUnits with dilations [1, 3, 9]
+   - Snake1d activation
+   - Strided convolution for downsampling
+
+3. Decoder (snac/layers.py)
+   - Convolutional decoder with transposed convolutions
+   - Multi-scale upsampling matching encoder rates
+   - Optional noise injection for stochasticity
+   - Mirror architecture of encoder
+
+   Architecture Flow:
+   Input → LocalMHA → DecoderBlocks → Snake1d → WNConv1d → Tanh → Output
+
+   DecoderBlock components:
+   - Transposed convolution for upsampling
+   - Optional NoiseBlock for controlled randomness
+   - 3 ResidualUnits with dilations [1, 3, 9]
+
+4. Vector Quantization (snac/vq.py)
+   - ResidualVectorQuantize: Multiple VQ layers in sequence
+   - VectorQuantize: Single quantization layer with L2 normalization
+   - Factorized codes (ViT-VQGAN style) with projection layers
+   - Multi-stride quantization for hierarchical representation
+
+   Key Features:
+   - L2 normalized encodings and codebook vectors
+   - Straight-through gradient estimator
+   - Configurable strides for different temporal resolutions
+   - Euclidean distance-based code selection
+
+5. Attention Mechanism (snac/attention.py)
+   - LocalMHA: Local Multi-Head Attention with windowed computation
+   - SinusoidalEmbeddings: Rotary positional embeddings
+   - Window-based processing to handle long sequences efficiently
+
+   Features:
+   - Configurable window size (default: 32)
+   - Rotary positional embeddings for temporal modeling
+   - Efficient scaled dot-product attention
+
+TECHNICAL SPECIFICATIONS
+-------------------------
+
+Pretrained Models:
+1. hubertsiuzdak/snac_24khz - 0.98 kbps, 19.8M params (Speech optimized)
+2. hubertsiuzdak/snac_32khz - 1.9 kbps, 54.5M params (Music/SFX)
+3. hubertsiuzdak/snac_44khz - 2.6 kbps, 54.5M params (High-quality Music/SFX)
+
+Hierarchical Token Structure:
+- 4 levels of quantization with decreasing temporal resolution
+- Example output shapes for 1-second audio: [12, 24, 48, 96] tokens
+- Coarse-to-fine temporal modeling enables long-range dependencies
+
+Neural Network Components:
+- Weight-normalized convolutions (WNConv1d, WNConvTranspose1d)
+- Snake activation: x + (α⁻¹) * sin²(αx) for smooth audio modeling
+- Residual connections with dilated convolutions
+- Local attention with rotary positional encodings
+
+DEPENDENCIES
+------------
+- torch: PyTorch framework
+- numpy: Numerical computations
+- einops: Tensor operations and reshaping
+- huggingface_hub: Model downloading and management
+
+USAGE PATTERNS
+--------------
+Basic Usage:
+```python
+import torch
+from snac import SNAC
+
+model = SNAC.from_pretrained("hubertsiuzdak/snac_32khz").eval().cuda()
+audio = torch.randn(1, 1, 32000).cuda()  # (Batch, Channel, Time)
+
+# Encode to hierarchical codes
+codes = model.encode(audio)
+# codes is List[Tensor] with shapes like [B, T1], [B, T2], [B, T3], [B, T4]
+
+# Decode back to audio
+audio_hat = model.decode(codes)
+
+# Single forward pass (encode + decode)
+audio_hat, codes = model(audio)
+```
+
+Multi-Scale Token Analysis:
+- Level 0: Coarsest temporal resolution (lowest frequency details)
+- Level 3: Finest temporal resolution (highest frequency details)
+- Each level captures different aspects of audio structure
+- Enables hierarchical generation and efficient audio modeling
+
+RESEARCH CONTRIBUTIONS
+----------------------
+1. Multi-scale temporal resolution in audio tokenization
+2. Reduced bitrate while maintaining quality through hierarchical encoding  
+3. Improved context modeling for long audio sequences
+4. Language model-friendly token structure for audio generation
+5. Efficient architecture with local attention and residual quantization
+
+DEVELOPMENT STATUS
+------------------
+- Stable release (v1.2.1)
+- Active maintenance and PyPI distribution
+- Research paper published at NeurIPS 2024 workshop
+- Open source with MIT license
+- Based on proven Descript Audio Codec foundations
+
+This codebase represents a significant advancement in neural audio compression,
+particularly valuable for AI-driven audio generation and language modeling applications.
