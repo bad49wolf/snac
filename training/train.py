@@ -95,7 +95,7 @@ def setup_dataset(config: Dict) -> DataLoader:
 
 def train_step(
     real_audio, generator, mpd, msd, 
-    optim_g, optim_d, device
+    optim_g, optim_d, device, iteration: int = 0
 ) -> Dict[str, float]:
     """Single training step."""
     # Train Generator
@@ -123,15 +123,21 @@ def train_step(
     mel_loss = mel_spectrogram_loss(real_audio.squeeze(1), fake_audio.squeeze(1))
     stft_loss_val = stft_loss(real_audio.squeeze(1), fake_audio.squeeze(1))
     
-    # Total generator loss
+    # Total generator loss with scaled weights for stability
+    # Original paper uses 45x for mel/stft, but we scale down during early training
+    mel_weight = 5.0 if iteration < 500 else 15.0  # Gradual increase
+    stft_weight = 5.0 if iteration < 500 else 15.0
+    
     loss_g = (
         gen_loss_mpd + gen_loss_msd +
         2 * (fm_loss_mpd + fm_loss_msd) +
-        45 * mel_loss +
-        45 * stft_loss_val
+        mel_weight * mel_loss +
+        stft_weight * stft_loss_val
     )
     
     loss_g.backward()
+    # Gradient clipping to prevent instability
+    torch.nn.utils.clip_grad_norm_(generator.parameters(), max_norm=1.0)
     optim_g.step()
     
     # Train Discriminator
@@ -151,6 +157,10 @@ def train_step(
     loss_d = mpd_real_loss + mpd_fake_loss + msd_real_loss + msd_fake_loss
     
     loss_d.backward()
+    # Gradient clipping to prevent instability
+    torch.nn.utils.clip_grad_norm_(
+        list(mpd.parameters()) + list(msd.parameters()), max_norm=1.0
+    )
     optim_d.step()
     
     return {
@@ -158,6 +168,10 @@ def train_step(
         "loss_d": loss_d.item(),
         "mel_loss": mel_loss.item(),
         "stft_loss": stft_loss_val.item(),
+        "gen_adv_loss": (gen_loss_mpd + gen_loss_msd).item(),
+        "fm_loss": (fm_loss_mpd + fm_loss_msd).item(),
+        "mel_weight": mel_weight,
+        "stft_weight": stft_weight,
     }
 
 
@@ -236,7 +250,7 @@ def main(config: Dict = None):
             # Training step
             losses = train_step(
                 real_audio, generator, mpd, msd, 
-                optim_g, optim_d, device
+                optim_g, optim_d, device, iteration
             )
             
             # Update learning rates
@@ -248,10 +262,13 @@ def main(config: Dict = None):
             # Logging
             if iteration % config["training"]["log_interval"] == 0:
                 pbar.set_postfix({
-                    'G_loss': f'{losses["loss_g"]:.3f}',
+                    'G_loss': f'{losses["loss_g"]:.1f}',
                     'D_loss': f'{losses["loss_d"]:.3f}',
-                    'Mel': f'{losses["mel_loss"]:.3f}',
-                    'STFT': f'{losses["stft_loss"]:.3f}',
+                    'Mel': f'{losses["mel_loss"]:.2f}',
+                    'STFT': f'{losses["stft_loss"]:.2f}',
+                    'Adv': f'{losses["gen_adv_loss"]:.2f}',
+                    'FM': f'{losses["fm_loss"]:.2f}',
+                    'MW': f'{losses["mel_weight"]:.1f}',
                     'LR': f'{scheduler_g.get_last_lr()[0]:.2e}'
                 })
             

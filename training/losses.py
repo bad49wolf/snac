@@ -49,7 +49,7 @@ def generator_loss(fake_outputs: List) -> torch.Tensor:
 
 
 def mel_spectrogram_loss(real_audio: torch.Tensor, fake_audio: torch.Tensor) -> torch.Tensor:
-    """Compute mel-spectrogram reconstruction loss."""
+    """Compute mel-spectrogram reconstruction loss with log-scale for stability."""
     mel_transform = torchaudio.transforms.MelSpectrogram(
         sample_rate=24000,
         n_fft=1024,
@@ -60,7 +60,11 @@ def mel_spectrogram_loss(real_audio: torch.Tensor, fake_audio: torch.Tensor) -> 
     real_mel = mel_transform(real_audio)
     fake_mel = mel_transform(fake_audio)
     
-    return F.l1_loss(fake_mel, real_mel)
+    # Convert to log-scale (dB) for more stable loss computation
+    real_mel_log = torch.log(real_mel.clamp(min=1e-8))
+    fake_mel_log = torch.log(fake_mel.clamp(min=1e-8))
+    
+    return F.l1_loss(fake_mel_log, real_mel_log)
 
 
 def stft_loss(real_audio: torch.Tensor, fake_audio: torch.Tensor) -> torch.Tensor:

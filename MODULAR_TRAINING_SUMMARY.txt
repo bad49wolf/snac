@@ -46,12 +46,13 @@ FILES BREAKDOWN:
    ✓ STFTDiscriminator for spectrogram-based discrimination
    ✓ All weight normalization and proper architectures
 
-4. training/losses.py (78 lines)
+4. training/losses.py (86 lines) - LOG-SCALE IMPROVEMENTS ✅
    ✓ feature_matching_loss: L1 loss between discriminator features
    ✓ discriminator_loss: MSE loss for real/fake classification
    ✓ generator_loss: MSE adversarial loss for generator
-   ✓ mel_spectrogram_loss: L1 loss in mel domain (80 mels)
+   ✓ ✅ IMPROVED: mel_spectrogram_loss now uses log-scale for stability
    ✓ stft_loss: Multi-resolution STFT reconstruction loss
+   ✓ ✅ FIXED: Prevents loss explosion with proper magnitude scaling
 
 5. training/config.py (95 lines)
    ✓ create_snac_24khz_config: Speech model (19.8M params, 0.98 kbps)
@@ -60,12 +61,15 @@ FILES BREAKDOWN:
    ✓ create_training_config: Complete training configuration builder
    ✓ DATASET_CONFIGS: Presets for ljspeech, common_voice, librispeech, vctk
 
-6. training/train.py (223 lines)
+6. training/train.py (289 lines) - LOSS STABILITY FIXES ✅
    ✓ main: Complete training function with all components
    ✓ setup_models: Initialize generator and discriminators
    ✓ setup_optimizers: AdamW optimizers with exponential decay
    ✓ setup_dataset: DataLoader with streaming support
-   ✓ train_step: Single training iteration with all losses
+   ✓ ✅ FIXED: Dynamic loss weighting to prevent exploding losses
+   ✓ ✅ FIXED: Gradient clipping for training stability (max_norm=1.0)
+   ✓ ✅ IMPROVED: Enhanced logging with individual loss components
+   ✓ train_step: Single training iteration with stabilized losses
    ✓ save_checkpoint: Comprehensive checkpoint saving
 
 7. training/README.md (188 lines)
