@@ -130,6 +130,13 @@ class STFTDiscriminator(nn.Module):
     def forward(self, x):
         features = []
         
+        # Handle both 2D and 3D input tensors
+        if x.dim() == 3:
+            # Input is (batch, channels, time) - squeeze channel dimension
+            x = x.squeeze(1)
+        elif x.dim() != 2:
+            raise ValueError(f"Expected 2D or 3D input, got {x.dim()}D tensor with shape {x.shape}")
+        
         # Compute STFT
         x_stft = torch.stft(
             x,
