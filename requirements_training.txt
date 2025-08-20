@@ -1,4 +1,4 @@
-# Additional requirements for training SNAC
+# Requirements for training SNAC models
 torch>=2.0.0
 torchaudio>=2.0.0
 numpy
@@ -6,4 +6,3 @@ einops
 huggingface_hub
 datasets>=2.0.0
 tqdm
-pathlib
