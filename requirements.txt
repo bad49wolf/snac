@@ -1,4 +1,9 @@
-torch
 numpy
 einops
 huggingface_hub
+torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+torchvision --index-url https://download.pytorch.org/whl/cu128
+torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+torchcodec==0.6 --index-url https://download.pytorch.org/whl/cu128
+transformers
+librosa
